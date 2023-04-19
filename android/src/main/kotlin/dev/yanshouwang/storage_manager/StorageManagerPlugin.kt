@@ -1,35 +1,43 @@
 package dev.yanshouwang.storage_manager
 
+import android.content.Context
+import android.os.Build
+import android.os.storage.StorageManager
+import android.os.storage.StorageManager.StorageVolumeCallback
 import androidx.annotation.NonNull
+import androidx.annotation.RequiresApi
+import androidx.core.content.ContextCompat
 
 import io.flutter.embedding.engine.plugins.FlutterPlugin
-import io.flutter.plugin.common.MethodCall
-import io.flutter.plugin.common.MethodChannel
-import io.flutter.plugin.common.MethodChannel.MethodCallHandler
-import io.flutter.plugin.common.MethodChannel.Result
+import java.util.concurrent.Executors
+
+const val KEY_CONTEXT = "KEY_CONTEXT"
+const val KEY_STORAGE_MANAGER_FLUTTER_API = "KEY_STORAGE_MANAGER_FLUTTER_API"
+
+val instances = mutableMapOf<String, Any>()
+
+val context get() = instances[KEY_CONTEXT] as Context
+val mainExecutor get() = ContextCompat.getMainExecutor(context)
+val storageManager get() = context.getSystemService(Context.STORAGE_SERVICE) as StorageManager
+val flutterApi get() = instances[KEY_STORAGE_MANAGER_FLUTTER_API] as StorageManagerFlutterApi
 
 /** StorageManagerPlugin */
-class StorageManagerPlugin: FlutterPlugin, MethodCallHandler {
-  /// The MethodChannel that will the communication between Flutter and native Android
-  ///
-  /// This local reference serves to register the plugin with the Flutter Engine and unregister it
-  /// when the Flutter Engine is detached from the Activity
-  private lateinit var channel : MethodChannel
+class StorageManagerPlugin : FlutterPlugin {
+    override fun onAttachedToEngine(@NonNull binding: FlutterPlugin.FlutterPluginBinding) {
+        val binaryMessenger = binding.binaryMessenger
 
-  override fun onAttachedToEngine(@NonNull flutterPluginBinding: FlutterPlugin.FlutterPluginBinding) {
-    channel = MethodChannel(flutterPluginBinding.binaryMessenger, "storage_manager")
-    channel.setMethodCallHandler(this)
-  }
+        instances[KEY_CONTEXT] = binding.applicationContext
+        instances[KEY_STORAGE_MANAGER_FLUTTER_API] = StorageManagerFlutterApi(binaryMessenger)
 
-  override fun onMethodCall(@NonNull call: MethodCall, @NonNull result: Result) {
-    if (call.method == "getPlatformVersion") {
-      result.success("Android ${android.os.Build.VERSION.RELEASE}")
-    } else {
-      result.notImplemented()
+        StorageManagerHostApi.setUp(binaryMessenger, StorageManagerApi)
     }
-  }
 
-  override fun onDetachedFromEngine(@NonNull binding: FlutterPlugin.FlutterPluginBinding) {
-    channel.setMethodCallHandler(null)
-  }
+    override fun onDetachedFromEngine(@NonNull binding: FlutterPlugin.FlutterPluginBinding) {
+        val binaryMessenger = binding.binaryMessenger
+
+        StorageManagerHostApi.setUp(binaryMessenger, null)
+
+        instances.remove(KEY_CONTEXT)
+        instances.remove(KEY_STORAGE_MANAGER_FLUTTER_API)
+    }
 }
